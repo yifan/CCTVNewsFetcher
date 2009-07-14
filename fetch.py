@@ -1,4 +1,6 @@
 #!/bin/python
+# vim: set fileencoding=utf8 :
+
 
 ###############################################################################
 #
@@ -17,7 +19,12 @@ import urllib2
 import re, codecs, sys
 
 
-regexText       = re.compile("<P>&nbsp;&nbsp;&nbsp;&nbsp;(?P<txt>.*)</P>")
+regex06Text       = re.compile("<p align=left>(?P<txt>.*?)</p>", re.S|re.I)
+regex07Text       = re.compile("<p>(?P<txt>.*?)</p>", re.S|re.I)
+regex06List     = re.compile(u"<!--列表开始-->(?P<txt>.*)<!--列表结束 -->".encode('gb2312'))
+tag06ListStart  = u"<!--列表开始-->".encode('gb2312')
+tag06ListEnd    = u"<!--列表结束 -->".encode('gb2312')
+regex07Video    = re.compile("")
 
 class Extractor:
     """ Extract content belongs to specific tag
@@ -63,27 +70,63 @@ class Parser:
         raw = url.read()
         extractor = Extractor('div', '<div\s+id="md_major_article_content".*>')
         html = extractor.extract(raw)
-        text = ""
-        for m in regexText.finditer(html):
-            text += m.group('txt')
-        return text
+        if self.pagetype == 0:
+            regex = regex07Text
+        elif self.pagetype == 1:
+            regex = regex06Text
+
+        if html:
+            text = ""
+            for m in regex.finditer(html):
+                text += m.group('txt') + "\n"
+            return text
+        else:
+            logging.error("Cannot extract context from this page")
+            return ""
 
     def parseFrontPage(self, frontpage):
         url = urllib2.urlopen(frontpage)
         html = url.read()
         html = html.replace("href!=", "href=")
-        soup = BeautifulSoup(html)
-        divContent = soup.findAll('ul')
+        
+        if html.find('title_list tl_f14 tl_video') >= 0:
 
-        links = []
-        for div in divContent:
-            if div['class'] == "title_list tl_f14 tl_video":
+            soup = BeautifulSoup(html)
+            divContent = soup.findAll('ul')
+
+            links = []
+            for div in divContent:
+                if div['class'] == "title_list tl_f14 tl_video":
+                    links.extend(div.findAll('a'))
+
+            for link in links:
+                logging.info(link['href'])
+
+            self.pagetype = 0
+
+            return [ link['href'] for link in links ]
+
+        elif html.find(tag06ListStart) >= 0:
+            st = html.find(tag06ListStart) + len(tag06ListStart)
+            en = html.find(tag06ListEnd)
+
+            extracted = html[st:en]
+            soup = BeautifulSoup(extracted)
+            print soup
+            links = []
+            for div in soup.findAll('td', attrs={'class':'big'}):
                 links.extend(div.findAll('a'))
         #print links
 
-        for link in links:
-            logging.info(link['href'])
-        return [ link['href'] for link in links ]
+            for link in links:
+                logging.info(link['href'])
+
+            self.pagetype = 1
+
+            return [ link['href'] for link in links ]
+        else:
+            logging.error("Unrecognized frontpage. Parsing failed")
+            return []
 
 if __name__ == "__main__":
     from optparse import OptionParser
@@ -101,9 +144,11 @@ if __name__ == "__main__":
 
     parser = Parser()
 
-    links = parser.parseFrontPage(args[0])
+    testPage06="http://www.cctv.com/news/xwlb/20090625/index.shtml"
+
+    links = parser.parseFrontPage(testPage06)
 
     for link in links[1:]:
         logging.info("Downloading "+link)
         text = parser.parse(link)
-        print text
+        logging.info(text.decode('gb2312'))
