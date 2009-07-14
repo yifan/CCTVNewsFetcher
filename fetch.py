@@ -129,11 +129,18 @@ class Parser:
             return []
 
 if __name__ == "__main__":
+    usage = """ 
+    Usage: 
+      python fetch.py [url of index page]
+      e.g. 
+        python fetch.py http://news.cctv.com/news/xwlb/20090625/index.shtml
+    """
+
     from optparse import OptionParser
 
     logging.basicConfig(level=logging.DEBUG) 
 
-    parser = OptionParser()
+    parser = OptionParser(usage=usage)
     parser.add_option("-f", "--file", dest="filename",
         help="write report to FILE", metavar="FILE")
     parser.add_option("-q", "--quiet",
@@ -144,9 +151,7 @@ if __name__ == "__main__":
 
     parser = Parser()
 
-    testPage06="http://www.cctv.com/news/xwlb/20090625/index.shtml"
-
-    links = parser.parseFrontPage(testPage06)
+    links = parser.parseFrontPage(args[0])
 
     for link in links[1:]:
         logging.info("Downloading "+link)
