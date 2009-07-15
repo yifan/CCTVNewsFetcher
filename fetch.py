@@ -16,7 +16,7 @@
 import logging
 from BeautifulSoup import BeautifulSoup
 import urllib2
-import re, codecs, sys
+import re, codecs, sys, os
 
 
 regex06Text       = re.compile("<p align=left>(?P<txt>.*?)</p>", re.S|re.I)
@@ -25,6 +25,10 @@ regex06List     = re.compile(u"<!--列表开始-->(?P<txt>.*)<!--列表结束 --
 tag06ListStart  = u"<!--列表开始-->".encode('gb2312')
 tag06ListEnd    = u"<!--列表结束 -->".encode('gb2312')
 regex07Video    = re.compile("")
+
+regexDate       = re.compile("http://news.cctv.com/news/xwlb/(?P<dir>\d+)/index.shtml")
+
+regex06Media    = re.compile('media 300k"\s+href="(?P<url>.*?)"', re.I)
 
 class Extractor:
     """ Extract content belongs to specific tag
@@ -72,19 +76,35 @@ class Parser:
         html = extractor.extract(raw)
         if self.pagetype == 0:
             regex = regex07Text
+            
         elif self.pagetype == 1:
             regex = regex06Text
+            m = regex06Media.search(raw)
+            mediaurl = m.group('url')
+            mediaurl = mediaurl.replace("www.cctv.com/video","v.cctv.com/flash")
+            mediaurl = mediaurl.replace(".shtml",".flv")
+            logging.info(mediaurl)
+            filename = page.replace(":","_").replace("/","_").rstrip(".shtml")
+            os.system("wget -O %s.flv %s" % (os.path.join(self.dir, filename), mediaurl))
+
 
         if html:
             text = ""
             for m in regex.finditer(html):
                 text += m.group('txt') + "\n"
+            shtml = open(os.path.join(self.dir, filename+".raw"), "w")
+            shtml.write(text)
+            shtml.close()
             return text
         else:
             logging.error("Cannot extract context from this page")
             return ""
 
+
     def parseFrontPage(self, frontpage):
+        if not os.path.exists(self.dir):
+            os.mkdir(self.dir)
+
         url = urllib2.urlopen(frontpage)
         html = url.read()
         html = html.replace("href!=", "href=")
@@ -116,7 +136,7 @@ class Parser:
             links = []
             for div in soup.findAll('td', attrs={'class':'big'}):
                 links.extend(div.findAll('a'))
-        #print links
+            #print links
 
             for link in links:
                 logging.info(link['href'])
@@ -137,8 +157,9 @@ if __name__ == "__main__":
     """
 
     from optparse import OptionParser
+    from datetime import date, timedelta, datetime
 
-    logging.basicConfig(level=logging.DEBUG) 
+    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s") 
 
     parser = OptionParser(usage=usage)
     parser.add_option("-f", "--file", dest="filename",
@@ -146,14 +167,29 @@ if __name__ == "__main__":
     parser.add_option("-q", "--quiet",
         action="store_false", dest="verbose", default=True,
         help="don't print status messages to stdout")
-
+    
     (options, args) = parser.parse_args()
 
     parser = Parser()
 
-    links = parser.parseFrontPage(args[0])
+    stdate = datetime.strptime(args[0], "%Y%m%d").date()
+    endate = datetime.strptime(args[1], "%Y%m%d").date()
 
-    for link in links[1:]:
-        logging.info("Downloading "+link)
-        text = parser.parse(link)
-        logging.info(text.decode('gb2312'))
+    oneday = timedelta(1)
+    cudate = stdate
+    while True:
+        url = "http://news.cctv.com/news/xwlb/%s/index.shtml" % cudate.strftime("%Y%m%d")
+
+        parser.dir = cudate.strftime("%Y%m%d")
+        links = parser.parseFrontPage(url)
+
+        for link in links[1:]:
+            if link.strip() == "": continue
+            logging.info("Downloading "+link)
+            text = parser.parse(link)
+            logging.info(text.decode('gb2312', 'ignore'))
+
+        if cudate == endate:
+            logging.info("DONE.")
+            break
+        cudate += oneday
