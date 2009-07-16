@@ -80,12 +80,18 @@ class Parser:
         elif self.pagetype == 1:
             regex = regex06Text
             m = regex06Media.search(raw)
-            mediaurl = m.group('url')
-            mediaurl = mediaurl.replace("www.cctv.com/video","v.cctv.com/flash")
-            mediaurl = mediaurl.replace(".shtml",".flv")
-            logging.info(mediaurl)
             filename = page.replace(":","_").replace("/","_").rstrip(".shtml")
-            os.system("wget -O %s.flv %s" % (os.path.join(self.dir, filename), mediaurl))
+            if m:
+                mediaurl = m.group('url')
+                mediaurl = mediaurl.replace("www.cctv.com/video","v.cctv.com/flash")
+                mediaurl = mediaurl.replace(".shtml",".flv")
+                logging.info(mediaurl)
+                if os.path.exists(os.path.join(self.dir, filename)):
+                    logging.info("Skipping exsiting download")
+                else:
+                    os.system("wget -O %s.flv %s" % (os.path.join(self.dir, filename), mediaurl))
+            else:
+                logging.info("No video for this news")
 
 
         if html:
